@@ -1,7 +1,5 @@
 #include <WiFi.h>    
 #include <WiFiUdp.h>
-#include <HTTPClient.h>
-#include <UrlEncode.h>
 #include <ArduinoOTA.h>
 #include "NTPClient.h"
 #include "telegram_bot.h"
@@ -11,8 +9,8 @@
 
 TelegramBot telegramBot;
 
-const char* ssid = "realme 7";
-const char* password = "28112020";
+const char* ssid = "ZettaHouse";
+const char* password = "Technoedge";
 const char* bot_token = telegramBot.getBotToken();
 const char* chat_id = telegramBot.getChatId();
 String telegram_url = telegramBot.getTelegramUrl();
@@ -88,6 +86,10 @@ void setup() {
   Serial.println(get_eeprom_esp32Data);
   Serial.println("\n");
 
+  pinMode(LED_BUILTIN, OUTPUT);
+  telegramBot.sendMessageToTelegram(telegram_url, query, reconnectedMessage(disconnectedDate, disconnectedTime, reconnectedDate, reconnectedTime));
+
+
   ArduinoOTA.setHostname("sam-esp32");
   ArduinoOTA.setPassword("samESP32");
   ArduinoOTA.begin();
@@ -95,6 +97,12 @@ void setup() {
 
 void loop() {
   ArduinoOTA.handle();
+
+  digitalWrite(LED_BUILTIN, HIGH);
+  delay(150);
+  digitalWrite(LED_BUILTIN, LOW);
+  delay(150);
+
   ntpData();
   esp32Data = esp32StatusMessage;
   esp32Data.toCharArray(eeprom_esp32Data, sizeof(eeprom_esp32Data) + 1);
