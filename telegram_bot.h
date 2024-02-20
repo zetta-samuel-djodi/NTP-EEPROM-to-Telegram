@@ -1,5 +1,5 @@
-#ifndef TELEGRAM_BOT
-#define TELEGRAM_BOT
+#ifndef telegram_bot_h
+#define telegram_bot_h
 
 #include "Arduino.h"
 #include <HTTPClient.h>

@@ -1,224 +1,142 @@
 #include <WiFi.h>    
 #include <WiFiUdp.h>
-#include <ArduinoOTA.h>
+#include "EEPROMFeatures.h"
 #include "NTPClient.h"
 #include "telegram_bot.h"
-#include "EEPROMFeatures.h"
 
-#define EEPROM_SIZE 512
+// WiFI_Set Up
+const char* ssid = "Al-Debaran";
+const char* password = "........";
+void wifi_setup(){
+  WiFi.begin(ssid, password);
+  Serial.println("Connecting");
+  while(WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.print("Connected to WiFi network with IP Address: ");
+  Serial.println(WiFi.localIP());
+  WiFi.setAutoReconnect(true);
+  WiFi.persistent(true);
+}
 
+//custom lib telebot
 TelegramBot telegramBot;
-
-const char* ssid = "ZettaHouse";
-const char* password = "Technoedge";
-const char* bot_token = telegramBot.getBotToken();
-const char* chat_id = telegramBot.getChatId();
 String telegram_url = telegramBot.getTelegramUrl();
-String message;
 String query = telegramBot.getQuery();
 
-String currentTimeStamp;
-String currentDateStamp;
-String disconnectedMessage;
-String esp32StatusMessage;
+//custom lib EEPROM
+EEPROMFeatures EEPROMF(0,512);
 
-String customDate;
-String customTimeStamp;
-
-String disconnectedDate;
-String disconnectedTime;
-String reconnectedDate;
-String reconnectedTime;
-
-String esp32Data;
-
-String get_eeprom_esp32Data;
-
-char eeprom_esp32Data[150];
-
-enum WifiState {
-  CONNECTED,
-  DISCONNECTED,
-  RECONNECTING,
-} wifiState;
-
-struct TimeStamp {
-  String Hour;
-  String Minute;
-  String Second;
-} timeStamp;
-
-struct DateStamp {
-  int monthIndex;
-  int dayIndex;
-  String Date;
-  String Day;
-  String Month;
-  String Year;
-} dateStamp;
-
-const unsigned int minute = 60;
-const unsigned int hour = 60 * minute;
-const unsigned int wita = 8 * hour;
-
+// custom lib NTP
 WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org", wita);
-EEPROMFeatures EEPROMF(0, EEPROM_SIZE);
+NTPClient timeClient(ntpUDP,"pool.ntp.org", 28800, 60000);
 
-void wifiSetup(void);
-void ntpData(void);
-void sendMessageToTelegram(String message);
-void outputDCTime(String state);
-void outputReconnectTime(String state);
-String reconnectedMessage(String disconnectTime, String reconnectedTime);
+// variable tambahan untuk get waktu
+uint8_t dayIndex;
+String dayStr;  
+uint8_t monthIndex;
+String monthStr;  
+uint8_t yearIndex;
+String yearStr;
+//waktu saat ini
+String waktu;
+String hari;
+String tanggal;
+String bulan;
+String tahun;
+// waktu last online
+String waktu_LO;
+String hari_LO;
+String tanggal_LO;
+String bulan_LO;
+String tahun_LO;
+
+String pending_LO;
+
+char msg_LO[128];
+char msg_BO[128];
+char msg_LP[128];
+String send_LO;
+String send_BO;
+String send_LP;
+
+// time update
+void du(){
+  timeClient.update();
+  delay(1000);
+
+  waktu = timeClient.getFormattedTime();
+
+  dayIndex = timeClient.getFormattedDate().lastIndexOf('-') + 1;
+  dayStr = timeClient.getFormattedDate().substring(dayIndex);  
+  monthIndex = timeClient.getFormattedDate().indexOf('-') + 1;
+  monthStr = timeClient.getFormattedDate().substring(monthIndex, monthIndex + 2);  
+  yearIndex = timeClient.getFormattedDate().indexOf('-');
+  yearStr = timeClient.getFormattedDate().substring(0, yearIndex);
+
+  hari = timeClient.getDayName(timeClient.getDay());
+  tanggal = dayStr;
+  bulan = timeClient.getMonthName(monthStr.toInt());
+  tahun = yearStr;
+}
 
 void setup() {
   Serial.begin(115200);
-  
+  wifi_setup();
   if(EEPROMF.begin() == false){
     ESP.restart();
   }
-
-  wifiNTPSetup();
-  ntpData();
-  get_eeprom_esp32Data = EEPROMF.readString(0);
-  Serial.println("\nget_eeprom_esp32Data : ");
-  Serial.println(get_eeprom_esp32Data);
-  Serial.println("\n");
-
-  pinMode(LED_BUILTIN, OUTPUT);
-  telegramBot.sendMessageToTelegram(telegram_url, query, reconnectedMessage(disconnectedDate, disconnectedTime, reconnectedDate, reconnectedTime));
-
-
-  ArduinoOTA.setHostname("sam-esp32");
-  ArduinoOTA.setPassword("samESP32");
-  ArduinoOTA.begin();
+  timeClient.begin();
+  delay(1000);
+  du();
+  delay(1000);
+  send_LO = EEPROMF.readString(0);
+  send_LP = EEPROMF.readString(128);
+  snprintf(msg_BO, sizeof(msg_BO), "System back online at %s on %s %s %s %s", waktu.c_str(), hari.c_str(), tanggal.c_str(), bulan.c_str(), tahun.c_str());
+  send_BO = String (msg_BO);
+  Serial.println(send_LP);
+  Serial.println(send_LO);
+  Serial.println(send_BO);
+  telegramBot.sendMessageToTelegram(telegram_url, query, send_LP);    
+  telegramBot.sendMessageToTelegram(telegram_url, query, send_LO);    
+  telegramBot.sendMessageToTelegram(telegram_url, query, send_BO);    
 }
 
 void loop() {
-  ArduinoOTA.handle();
-
-  digitalWrite(LED_BUILTIN, HIGH);
-  delay(150);
-  digitalWrite(LED_BUILTIN, LOW);
-  delay(150);
-
-  ntpData();
-  esp32Data = esp32StatusMessage;
-  esp32Data.toCharArray(eeprom_esp32Data, sizeof(eeprom_esp32Data) + 1);
-  EEPROMF.writeString(0, eeprom_esp32Data);
-
-  if(WiFi.status() != WL_CONNECTED) {
-    if (wifiState != DISCONNECTED && wifiState != RECONNECTING) {
-        wifiState = RECONNECTING;
-        disconnectedDate = customDate;
-        disconnectedTime = customTimeStamp;
-        outputDCTime(disconnectedDate, disconnectedTime);
-    } else {
-      wifiState = RECONNECTING;
-    }
-  } else {
-    if (wifiState == RECONNECTING) {
-      wifiState = CONNECTED;
-      reconnectedDate = customDate;
-      reconnectedTime = customTimeStamp;
-      outputReconnectTime(reconnectedDate, reconnectedTime);
-      telegramBot.sendMessageToTelegram(telegram_url, query, reconnectedMessage(disconnectedDate, disconnectedTime, reconnectedDate, reconnectedTime));
-    }
-  }
+  digitalWrite(BUILTIN_LED, LOW);
   delay(500);
-}
+  digitalWrite(BUILTIN_LED, HIGH);
 
-void wifiNTPSetup(void) {
-  Serial.print("Connecting to Wifi SSID : ");
-  Serial.println(ssid);
-  WiFi.begin(ssid, password);
-
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(100);
-    Serial.println("Connecting to WiFi...");
+  if (WiFi.status() == WL_CONNECTED && pending_LO != ""){
+    Serial.println("");
+    Serial.println("reconnected");
+    // Kirim pesan yang gagal dikirim
+    telegramBot.sendMessageToTelegram(telegram_url, query, pending_LO);    
+    Serial.println(pending_LO);
+    snprintf(msg_BO, sizeof(msg_BO), "System back online at %s on %s %s %s %s", waktu.c_str(), hari.c_str(), tanggal.c_str(), bulan.c_str(), tahun.c_str());
+    send_BO = String (msg_BO);
+    telegramBot.sendMessageToTelegram(telegram_url, query, send_BO);    
+    Serial.println(send_BO);
+    pending_LO = "";
   }
+  du();
+  if (WiFi.status() == WL_CONNECTED){
+    waktu_LO = waktu;
+    hari_LO = hari;
+    tanggal_LO = tanggal;
+    bulan_LO = bulan;
+    tahun_LO = tahun;
+  }  
+  snprintf(msg_LO, sizeof(msg_LO), "System last online at %s on %s %s %s %s", waktu_LO.c_str(), hari_LO.c_str(), tanggal_LO.c_str(), bulan_LO.c_str(), tahun_LO.c_str());
+  snprintf(msg_LP, sizeof(msg_LP), "System last onpower at %s on %s %s %s %s", waktu.c_str(), hari.c_str(), tanggal.c_str(), bulan.c_str(), tahun.c_str());
 
-  wifiState = CONNECTED;
-  Serial.println("Connected to Wifi!");
-  Serial.print("ESP 32 Local IP Address : ");
-  Serial.println(WiFi.localIP());
-
-  timeClient.begin();
-  timeClient.setTimeOffset(wita);
-}
-
-void ntpData(void) {
-  timeClient.update();
-
-  currentTimeStamp = timeClient.getFormattedTime();
-  currentDateStamp = timeClient.getFormattedDate();
-
-  timeStamp.Hour = timeClient.getHours();
-  timeStamp.Minute = timeClient.getMinutes();
-  timeStamp.Second = timeClient.getSeconds();
-
-  dateStamp.monthIndex = timeClient.getMonth();
-  dateStamp.dayIndex = timeClient.getDay();
-
-  dateStamp.Date = timeClient.getDate();
-  dateStamp.Day = timeClient.getDayName();
-  dateStamp.Month = timeClient.getMonthName();
-  dateStamp.Year = timeClient.getYear();
-
-  customTimeStamp = timeStamp.Hour + ":" + timeStamp.Minute + ":" + timeStamp.Second;
-  customDate = dateStamp.Day + ", " + dateStamp.Date + " " + dateStamp.Month + " " + dateStamp.Year;
-
-  esp32StatusMessage = "Status ESP 32\n";
-  esp32StatusMessage += "ESP 32 last online time :\n";
-  esp32StatusMessage += disconnectedDate;
-  esp32StatusMessage += " - ";
-  esp32StatusMessage += disconnectedTime;
-  esp32StatusMessage += "\nESP 32 last power on :\n";
-  esp32StatusMessage += customDate;
-  esp32StatusMessage += " - ";
-  esp32StatusMessage += customTimeStamp;
-  esp32StatusMessage += "\n";
-}
-
-String reconnectedMessage(String disconnectedDate, String disconnectedTime, String reconnectedDate, String reconnectedTime) {
-  String reconnectMessage = "Device disconnected at : " + disconnectedDate + " - " +  disconnectedTime + "\n" + "Device Back Online at : " + reconnectedDate + " - " + reconnectedTime;
-  return reconnectMessage;
-}
-
-void outputDCTime(String date, String time) {
-  Serial.print("Disconnected at : ");
-  Serial.print(date);
-  Serial.print(" - ");
-  Serial.println(time);
-}
-
-void outputReconnectTime(String date, String time) {
-  Serial.print("Reconnected at : ");
-  Serial.print(date);
-  Serial.print(" - ");
-  Serial.println(time);
-}
-
-void sendMessageToTelegram(String message) {
-  telegram_url ="https://api.telegram.org/bot" + String(bot_token) + "/sendMessage";
-  query ="chat_id=" + String(chat_id) + "&text=" + urlEncode(message);
-
-  HTTPClient http;
-  http.begin(telegram_url);
-
-  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
-
-  int response = http.POST(query);
-
-  if (response == 200) {
-    Serial.println("Pengiriman pesan menuju telegram berhasil!");
-    Serial.println("Pesan yang terkirim : ");
-    Serial.println(message);
-  } else {
-    Serial.print("Pengiriman pesan menuju telegram gagal dengan response code : ");
-    Serial.println(response);
+  if (WiFi.status() != WL_CONNECTED){
+    pending_LO = String (msg_LO);
+    Serial.println("reconnecting");
   }
-
-  http.end();
+  EEPROMF.writeString(0, msg_LO);
+  EEPROMF.writeString(128, msg_LP);
+  delay(5000);
 }

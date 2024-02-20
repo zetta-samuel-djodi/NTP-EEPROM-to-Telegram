@@ -1,8 +1,8 @@
 #include "telegram_bot.h"
 
 TelegramBot::TelegramBot() :
-  _bot_token("6484152030:AAEijHYXmF9DDCc-l3TIOutcDamgzHTpgbs"), 
-  _chat_id("1011605098"),
+  _bot_token("6895977405:AAGVqa86fkw1Ft5P9Q7VwEr-qNgYGS5yYsA"), 
+  _chat_id("1722827704"),
   _telegram_url("https://api.telegram.org/bot" + String(_bot_token) + "/sendMessage") {}
 
 const char* TelegramBot::getBotToken() {

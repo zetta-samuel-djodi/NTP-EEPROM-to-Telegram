@@ -61,10 +61,7 @@ public:
    */
   bool forceUpdate();
 
-  String getYear();
-  int getMonth();
   int getDay();
-  String getDate();
   int getHours();
   int getMinutes();
   int getSeconds();
@@ -105,6 +102,6 @@ public:
    * Replace the NTP-fetched time with seconds since Jan. 1, 1970
    */
   void setEpochTime(unsigned long secs);
-  String getMonthName(int month = -1);
-  String getDayName(int day = -1);
+  String getMonthName(int month);
+  String getDayName(int day);
 };

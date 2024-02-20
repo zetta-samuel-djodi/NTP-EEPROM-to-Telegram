@@ -118,10 +118,6 @@ unsigned long NTPClient::getEpochTime() {
          ((millis() - this->_lastUpdate) / 1000); // Time since last update
 }
 
-int NTPClient::getMonth() {
-  const unsigned long SECONDS_IN_MONTH = 30 * 24 * 60 * 60;
-  return (((this->getEpochTime()  / SECONDS_IN_MONTH) + 4 ) % 12);
-}
 int NTPClient::getDay() {
   return (((this->getEpochTime()  / 86400L) + 4 ) % 7); //0 is Sunday
 }
@@ -175,9 +171,6 @@ String NTPClient::getFormattedDate(unsigned long secs) {
 }
 
 String NTPClient::getMonthName(int month) {
-    if (month == -1) {
-        month = getMonth();
-    }
     static const char* monthNames[] = {
         "January", "February", "March", "April", "May", "June",
         "July", "August", "September", "October", "November", "December"
@@ -200,22 +193,6 @@ String NTPClient::getDayName(int day) {
     }
 
     return "Saturday";
-}
-
-String NTPClient::getDate() {
-    unsigned long epochTime = this->getEpochTime();
-    String formattedDate = getFormattedDate(epochTime);
-    String date = formattedDate.substring(8, 10);
-
-    return date;
-}
-
-String NTPClient::getYear() {
-    unsigned long epochTime = this->getEpochTime();
-    String formattedDate = getFormattedDate(epochTime);
-    String date = formattedDate.substring(0, 4);
-
-    return date;
 }
 
 void NTPClient::end() {
